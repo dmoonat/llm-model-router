@@ -9,7 +9,7 @@ Instead of sending every prompt to a heavy reasoning model or paying the latency
 ## Directory Structure
 
 ```text
-model_router/
+llm-model-router/
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
@@ -63,7 +63,7 @@ GOOGLE_CLOUD_LOCATION=global
 
 ## Running the Agent
 
-From the `model_router/` root directory:
+From the `llm-model-router/` root directory:
 
 ```bash
 # Launch the ADK Dev UI and select "laya_adk_model_router"

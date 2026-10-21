@@ -17,8 +17,9 @@ load_dotenv(_HERE / ".env")
 
 logger = logging.getLogger(__name__)
 
-# Lazily downloads/loads checkpoints on first predict() call
-laya_engine = Router(default="english")
+# Preload the English checkpoint at startup so the first request pays no load latency
+laya_engine = Router(default="laya-typed-decisions").preload(["laya-typed-decisions"])
+
 
 # 1. Define the Laya System-1 Classification Questions
 LAYA_COMPLEXITY_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -86,8 +87,10 @@ async def laya_router(
 
     active_router = router or laya_engine
     predict_kwargs: dict[str, Any] = {}
-    if model is not None:
-        predict_kwargs["model"] = model
+    target_model = model if model is not None else getattr(active_router, "default", None)
+    if target_model is not None:
+        predict_kwargs["model"] = target_model
+
 
     try:
         res = await asyncio.to_thread(
@@ -170,4 +173,3 @@ app = App(
     root_agent=root_agent,
     plugins=[LayaModelRouterPlugin()],
 )
-

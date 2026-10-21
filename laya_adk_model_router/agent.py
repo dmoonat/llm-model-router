@@ -17,6 +17,9 @@ from .questions import LAYA_COMPLEXITY_QUESTIONS
 _HERE = Path(__file__).resolve().parent
 load_dotenv(_HERE / ".env")
 
+SIMPLE_MODEL = os.getenv("SIMPLE_MODEL", "gemini-3.6-flash")
+COMPLEX_MODEL = os.getenv("COMPLEX_MODEL", "gemini-3.1-pro-preview")
+
 logger = logging.getLogger(__name__)
 
 # Preload the English checkpoint at startup so the first request pays no load latency
@@ -31,6 +34,8 @@ async def laya_router(
     router: Router | Any | None = None,
     model: str | None = None,
     confidence_threshold: float = 0.7,
+    simple_model: str = SIMPLE_MODEL,
+    complex_model: str = COMPLEX_MODEL,
 ) -> LlmResponse | None:
     """Standalone ADK `before_model_callback` using `laya.Router` (`convaiinnovations/laya`)."""
     if not llm_request.contents or llm_request.contents[-1].role != "user":
@@ -67,7 +72,6 @@ async def laya_router(
     if target_model is not None:
         predict_kwargs["model"] = target_model
 
-
     try:
         res = await asyncio.to_thread(
             active_router.predict,
@@ -91,26 +95,28 @@ async def laya_router(
     is_complex = choice == "complex" or confidence < confidence_threshold
     if is_complex:
         logger.info(
-            "[LayaRouter] Upgraded to gemini-3.1-pro-preview (choice=%s, conf=%.2f, laya_model=%s)",
+            "[LayaRouter] Upgraded to %s (choice=%s, conf=%.2f, laya_model=%s)",
+            complex_model,
             choice,
             confidence,
             checkpoint,
         )
-        llm_request.model = "gemini-3.1-pro-preview"
+        llm_request.model = complex_model
     else:
         logger.info(
-            "[LayaRouter] Routed to gemini-3.6-flash (choice=%s, conf=%.2f, laya_model=%s)",
+            "[LayaRouter] Routed to %s (choice=%s, conf=%.2f, laya_model=%s)",
+            simple_model,
             choice,
             confidence,
             checkpoint,
         )
-        llm_request.model = "gemini-3.6-flash"
+        llm_request.model = simple_model
 
     callback_context.state["routed_model"] = llm_request.model
     return None
 
 
-# 3. ADK Plugin wrapper around Laya Router
+# 2. ADK Plugin wrapper around Laya Router
 class LayaModelRouterPlugin(BasePlugin):
     """ADK Plugin wrapper around `laya.Router` (`convaiinnovations/laya`)."""
 
@@ -119,11 +125,15 @@ class LayaModelRouterPlugin(BasePlugin):
         router: Router | Any | None = None,
         model: str | None = None,
         confidence_threshold: float = 0.7,
+        simple_model: str = SIMPLE_MODEL,
+        complex_model: str = COMPLEX_MODEL,
     ) -> None:
         super().__init__(name="laya_model_router_plugin")
         self._router = router or laya_engine
         self._model = model
         self._confidence_threshold = confidence_threshold
+        self._simple_model = simple_model
+        self._complex_model = complex_model
 
     async def before_model_callback(
         self, *, callback_context: CallbackContext, llm_request: LlmRequest
@@ -134,13 +144,15 @@ class LayaModelRouterPlugin(BasePlugin):
             router=self._router,
             model=self._model,
             confidence_threshold=self._confidence_threshold,
+            simple_model=self._simple_model,
+            complex_model=self._complex_model,
         )
 
 
-# 4. Attach to the Laya Routed ADK App
+# 3. Attach to the Laya Routed ADK App
 root_agent = Agent(
     name="root_agent",
-    model="gemini-3.1-pro-preview",  # Default fallback
+    model=COMPLEX_MODEL,  # Default fallback
     instruction="You are an AI assistant.",
 )
 

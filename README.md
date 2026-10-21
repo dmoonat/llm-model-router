@@ -79,6 +79,10 @@ Configure your `.env` file inside `laya_adk_model_router/.env`:
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GOOGLE_CLOUD_LOCATION=global
+
+# Target Models for Laya Router
+SIMPLE_MODEL=gemini-3.6-flash
+COMPLEX_MODEL=gemini-3.1-pro-preview
 ```
 
 *(Alternatively, set `GOOGLE_API_KEY=...` with `GOOGLE_GENAI_USE_VERTEXAI=FALSE` to use the Gemini Developer API.)*
@@ -87,7 +91,7 @@ GOOGLE_CLOUD_LOCATION=global
 
 ## Running the Agent
 
-From the `model_router/` root directory:
+From the `llm-model-router/` root directory:
 
 ```bash
 # Launch the ADK Dev UI and select "laya_adk_model_router"

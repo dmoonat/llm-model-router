@@ -16,7 +16,8 @@ llm-model-router/
 └── laya_adk_model_router/
     ├── __init__.py
     ├── .env
-    └── agent.py
+    ├── agent.py
+    └── questions.py
 ```
 
 ---
@@ -31,17 +32,40 @@ flowchart LR
 ```
 
 1. **Intercept (`before_model_callback`)**: When a new user message arrives, [`LayaModelRouterPlugin`](laya_adk_model_router/agent.py) (or the standalone [`laya_router`](laya_adk_model_router/agent.py) callback) extracts `user_message` and up to 4 turns of `recent_context`.
-2. **System-1 Classification**: [`laya.Router`](https://huggingface.co/convaiinnovations/laya) evaluates `LAYA_COMPLEXITY_QUESTIONS` in a single forward pass, returning a calibrated `choice` (`"simple"` or `"complex"`) and `answer_confidence`.
+2. **System-1 Classification**: [`laya.Router`](https://huggingface.co/convaiinnovations/laya) evaluates [`LAYA_COMPLEXITY_QUESTIONS`](laya_adk_model_router/questions.py) in a single forward pass, returning a calibrated `choice` (`"simple"` or `"complex"`) and `answer_confidence`.
 3. **Dynamic Model Swap**:
    - **`simple`** (with `answer_confidence >= 0.70`) $\rightarrow$ routes to **`gemini-3.6-flash`**.
    - **`complex`** (or low confidence `< 0.70`) $\rightarrow$ upgrades to **`gemini-3.1-pro-preview`**.
 4. **Turn Persistence**: The selected model is saved in `callback_context.state["routed_model"]` so intermediate tool-response steps within the same turn stay on the routed model.
 
+> **Disclaimer — Customize [`LAYA_COMPLEXITY_QUESTIONS`](laya_adk_model_router/questions.py) for Your Use Case:**
+> The default `simple` and `complex` criteria in [`laya_adk_model_router/questions.py`](laya_adk_model_router/questions.py) are general-purpose software/IT examples. Because Laya conditions directly on your question `instructions` and `criteria` descriptions at inference time, **you should update `LAYA_COMPLEXITY_QUESTIONS` in `questions.py` (as well as `confidence_threshold`) to reflect the exact task boundaries, domain terminology, and escalation rules of your specific application or use case.**
+
+---
+
+## Laya Model Choice
+
+The [`convaiinnovations/laya`](https://huggingface.co/convaiinnovations/laya) repository holds all three checkpoints and serves as the hub for the family. The English checkpoint is at the repo root; the other two are bundled subfolders, and only the one you request is downloaded:
+
+| Checkpoint | Backbone Encoder | Params | Context | Best at |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`convaiinnovations/laya`](https://huggingface.co/convaiinnovations/laya)** (repo root) | ModernBERT-large | 421M | 512 | English text, guardrails, email triage |
+| **[`convaiinnovations/laya-multilingual`](https://huggingface.co/convaiinnovations/laya-multilingual)** | mmBERT-base | 322M | 1024 (up to 8k) | 100+ languages, ~2.2x faster |
+| **[`convaiinnovations/laya-typed-decisions`](https://huggingface.co/convaiinnovations/laya-typed-decisions)** | ModernBERT-large | 421M | 1024 | The four typed-decisions workflows (0.766 acc) |
+
+By default, [`agent.py`](laya_adk_model_router/agent.py) preloads **`laya-typed-decisions`**:
+
+```python
+laya_engine = Router(default="laya-typed-decisions").preload(["laya-typed-decisions"])
+```
+
+You can switch to `"english"` or `"multilingual"` (or pass `model="multilingual"` to `LayaModelRouterPlugin(model="multilingual")`) depending on your workload.
+
 ---
 
 ## Prerequisites & Installation
 
-From the `model_router/` root directory:
+From the `llm-model-router/` root directory:
 
 ```bash
 uv venv
@@ -63,7 +87,7 @@ GOOGLE_CLOUD_LOCATION=global
 
 ## Running the Agent
 
-From the `llm-model-router/` root directory:
+From the `model_router/` root directory:
 
 ```bash
 # Launch the ADK Dev UI and select "laya_adk_model_router"
@@ -73,7 +97,39 @@ adk web
 adk run laya_adk_model_router
 ```
 
-> **Note:** On the very first request, `laya` downloads the `convaiinnovations/laya` checkpoint (~846 MB) to your local Hugging Face cache (`~/.cache/huggingface/hub/`). All subsequent requests reuse the in-memory model.
+> **Note:** At startup, `Router(default="laya-typed-decisions").preload(["laya-typed-decisions"])` downloads (if not already cached in `~/.cache/huggingface/hub/`) and loads the `laya-typed-decisions` checkpoint into memory so the very first user request has zero cold-start latency.
+
+---
+
+## Example Queries (Simple vs. Complex)
+
+Use the following prompts in `adk web` or `adk run laya_adk_model_router` to test how the router classifies and dispatches requests:
+
+### Simple Queries (Routed to Flash)
+These prompts require no multi-step reasoning, architectural tradeoffs, or deep debugging (`choice="simple"` with `confidence >= 0.70`):
+
+- `"Hi! What are the standard IT helpdesk operating hours?"`
+- `"Convert 72 degrees Fahrenheit to Celsius."`
+- `"What is the capital of Australia and what currency do they use?"`
+- `"Summarize this sentence in 5 words: The deployment completed successfully with zero downtime."`
+
+**Expected terminal log:**
+```text
+[LayaRouter] Routed to gemini-3.6-flash (choice=simple, conf=0.81, laya_model=typed-decisions)
+```
+
+### Complex Queries (Routed to Pro)
+These prompts trigger complex classification (`choice="complex"` or `confidence < 0.70`) such as code debugging, system architecture, or multi-step analytical reasoning:
+
+- `"We're seeing a sporadic DeadlockException in our PostgreSQL order processing service when two workers update inventory rows concurrently. Walk through the lock ordering issue and show how to fix it in SQLAlchemy using SELECT FOR UPDATE SKIP LOCKED."`
+- `"Design a multi-region active-active event-driven architecture on GCP for processing 50,000 financial transactions per second with strict idempotency, RPO=0, and sub-100ms p99 latency. Compare Spanner vs. Bigtable for the ledger layer."`
+- `"Analyze the time and space complexity of a concurrent lock-free ring buffer in Rust, and write a thread-safe implementation that avoids the ABA problem."`
+- `"Our Kubernetes pod is OOMKilled every 6 hours under steady traffic. Give me a step-by-step root-cause diagnostic plan for profiling Python asyncio memory leaks in production without taking down the service."`
+
+**Expected terminal log:**
+```text
+[LayaRouter] Upgraded to gemini-3.1-pro-preview (choice=complex, conf=0.68, laya_model=typed-decisions)
+```
 
 ---
 
@@ -88,7 +144,7 @@ from laya_adk_model_router import LayaModelRouterPlugin
 
 root_agent = Agent(
     name="root_agent",
-    model="gemini-2.5-flash",
+    model="gemini-3.1-pro-preview",
     instruction="You are an AI assistant.",
 )
 
@@ -107,8 +163,9 @@ from laya_adk_model_router import laya_router
 
 root_agent = Agent(
     name="root_agent",
-    model="gemini-2.5-flash",
+    model="gemini-3.1-pro-preview",
     instruction="You are an AI assistant.",
     before_model_callback=laya_router,
 )
 ```
+

@@ -12,6 +12,8 @@ from google.adk.models import LlmRequest, LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
 from laya import Router
 
+from .questions import LAYA_COMPLEXITY_QUESTIONS
+
 _HERE = Path(__file__).resolve().parent
 load_dotenv(_HERE / ".env")
 
@@ -21,33 +23,7 @@ logger = logging.getLogger(__name__)
 laya_engine = Router(default="laya-typed-decisions").preload(["laya-typed-decisions"])
 
 
-# 1. Define the Laya System-1 Classification Questions
-LAYA_COMPLEXITY_QUESTIONS: dict[str, dict[str, Any]] = {
-    "complexity": {
-        "type": "choice",
-        "instructions": (
-            "How much reasoning depth is required to answer `user_message` "
-            "(taking `recent_context` into account if present)?"
-        ),
-        "criteria": {
-            "simple": (
-                "Greetings, small talk, routine FAQs, factual lookups, definitions, "
-                "basic status checks, short translations, reformatting, or direct "
-                "single-step questions that need no deep reasoning."
-            ),
-            "complex": (
-                "Debugging, stack traces, kernel panics, log parsing, race conditions, "
-                "memory leaks, code generation or refactoring, system architecture, "
-                "root-cause analysis, performance optimization, math/logic proofs, "
-                "SQL/data analysis, or multi-step analytical reasoning."
-            ),
-        },
-    }
-}
-
-
-
-# 2. Standalone ADK before_model_callback using Laya
+# 1. Standalone ADK before_model_callback using Laya
 async def laya_router(
     callback_context: CallbackContext,
     llm_request: LlmRequest,

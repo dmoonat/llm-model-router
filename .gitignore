@@ -22,3 +22,6 @@ env/
 # OS & editor files
 .DS_Store
 *.swp
+
+# Evaluation runtime logs
+eval/logs/

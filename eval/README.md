@@ -2,6 +2,8 @@
 
 Reproducible benchmark suite comparing a **4-Agent Google ADK application** with and without **[`LayaModelRouterPlugin`](../laya_adk_model_router/plugin.py)** on **real open-source Hugging Face datasets** (`ARC-Easy`, `MATH-500 Level 5`, `HumanEval`), instrumented with **[`adk-finops`](https://pypi.org/project/adk-finops/)**.
 
+> **Note:** The multi-agent use case and benchmark tasks in this folder are a simplified test setup for demonstration purposes and are **not conclusive for all scenarios**. Because routing gains depend on your specific traffic distribution, agent architecture, and domain prompts, it is recommended to customize [`LAYA_COMPLEXITY_QUESTIONS`](../laya_adk_model_router/questions.py), test the router on your own use cases, and explore other routing alternatives (such as `jev`) for comparison.
+
 ---
 
 ## What This Evaluates

@@ -234,10 +234,11 @@ The [`eval/`](eval/README.md) directory contains a reproducible **4-arm evaluati
 - **Full Evaluation Report**: [`eval/EVAL_REPORT.md`](eval/EVAL_REPORT.md)
 - **Evaluation Suite Instructions**: [`eval/README.md`](eval/README.md)
 
+> **Note — Illustrative Test Use Case:**
+> The multi-agent hierarchy and 45-sample benchmark (`ARC-Easy`, `MATH-500`, `HumanEval`) shown here are a simplified test setup designed to illustrate how `LayaModelRouterPlugin` and `adk-finops` work together, and the results are **not conclusive across all workloads**. Real-world cost, latency, and accuracy trade-offs depend heavily on your traffic mix (e.g., the ratio of simple vs. complex queries), agent/tool topologies, and domain-specific routing criteria. It is strongly encouraged to customize [`LAYA_COMPLEXITY_QUESTIONS`](laya_adk_model_router/questions.py), evaluate the router directly on your own production use cases, and explore other routing alternatives (such as `jev`) for side-by-side comparison.
+
 ```bash
 # Install evaluation dependencies and run the 4-arm benchmark (uses local cache in eval/data_cache/)
 uv pip install -r eval/requirements-eval.txt
 python -m eval.run_eval --samples-per-dataset 15 --concurrency 5
 ```
-
-

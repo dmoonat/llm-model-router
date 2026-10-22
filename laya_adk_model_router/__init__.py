@@ -1,12 +1,11 @@
-from . import agent, questions
-from .agent import (
+from . import agent, plugin, questions
+from .agent import app, root_agent
+from .plugin import (
     COMPLEX_MODEL,
     SIMPLE_MODEL,
     LayaModelRouterPlugin,
-    app,
     laya_engine,
     laya_router,
-    root_agent,
 )
 from .questions import LAYA_COMPLEXITY_QUESTIONS
 
@@ -19,7 +18,7 @@ __all__ = [
     "app",
     "laya_engine",
     "laya_router",
+    "plugin",
     "questions",
     "root_agent",
 ]
-

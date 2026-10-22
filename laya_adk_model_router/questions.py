@@ -11,15 +11,17 @@ LAYA_COMPLEXITY_QUESTIONS: dict[str, dict[str, Any]] = {
         ),
         "criteria": {
             "simple": (
-                "Greetings, small talk, routine FAQs, factual lookups, definitions, "
-                "basic status checks, short translations, reformatting, or direct "
-                "single-step questions that need no deep reasoning."
+                "Greetings, small talk, routine FAQs, basic factual lookups, "
+                "elementary science or general-knowledge multiple-choice recall, "
+                "definitions, basic status checks, short translations, reformatting, "
+                "or direct single-step questions that need no multi-step calculation."
             ),
             "complex": (
-                "Debugging, stack traces, kernel panics, log parsing, race conditions, "
-                "memory leaks, code generation or refactoring, system architecture, "
-                "root-cause analysis, performance optimization, math/logic proofs, "
-                "SQL/data analysis, or multi-step analytical reasoning."
+                "Multi-step math word problems, arithmetic or algebraic calculations, "
+                "quantitative reasoning, Python/SQL code generation or refactoring, "
+                "debugging, stack traces, kernel panics, log parsing, race conditions, "
+                "memory leaks, system architecture, root-cause analysis, performance "
+                "optimization, math/logic proofs, or multi-step analytical reasoning."
             ),
         },
     }

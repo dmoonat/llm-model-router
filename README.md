@@ -130,7 +130,7 @@ uv pip install -r requirements.txt
 
 ## Running the Agents
 
-From the `model_router/` directory:
+From the `llm-model-router/` directory:
 
 ```bash
 # Launch the ADK Dev UI (select either "laya_adk_model_router" or "decisions_adk_model_router")

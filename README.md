@@ -68,6 +68,10 @@ flowchart LR
 
 ## Decision Models Compared: `Laya` vs. `Gemini Decision 1`
 
+> **Summary (`Laya` vs. `Gemini Decision 1`)**: While both decision models achieve comparable routing accuracy (`100%`), end-to-end turn latency (`~17.7s`), and total cost savings (`~28–31%`) on this simple text evaluation setup, they differ in their underlying trade-offs:
+> - **`Laya` (`laya-typed-decisions`)** runs **in-process locally** on CPU/MPS/GPU (**~103 ms** avg overhead, **$0.00** API cost, no external network dependency) for short text prompts ($\le 1\text{K}$ tokens), requiring local memory/compute for its 421M weights.
+> - **`Gemini Decision 1` (`gemini-decision-1`)** runs as a **managed cloud API** (`v1beta`, **~607 ms** avg overhead, **~$0.00004/turn** at `$0.10 / 1M` input tokens) with **zero local model footprint**, **sharper probability calibration (`0.98` vs. `0.71`)**, and support for **262K-token multimodal inputs** (text, images, audio, video, PDFs). Because real-world performance depends on your prompt distribution and infrastructure constraints, we encourage testing both on your own workload.
+
 | Dimension | 1. Local Laya Router ([`laya_adk_model_router/`](laya_adk_model_router/)) | 2. Google Gemini Decisions API ([`decisions_adk_model_router/`](decisions_adk_model_router/README.md)) |
 | :--- | :--- | :--- |
 | **Decision Model(s)** | [`convaiinnovations/laya`](https://huggingface.co/convaiinnovations/laya) (`laya`, `laya-multilingual`, `laya-typed-decisions`) | **[`gemini-decision-1`](https://ai.google.dev/gemini-api/docs/decisions-api)** (`POST /v1beta/decisions` / `client.decisions.create`) |

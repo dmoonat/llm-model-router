@@ -6,12 +6,14 @@ Architecture:
   ├── math_analyst_agent (Multi-Step Mathematical Reasoning Specialist)
   └── code_engineer_agent (Python Software Engineering & Algorithm Specialist)
 
-4 Experimental Arms:
+9: 5 Experimental Arms:
   1. `all_simple`: coordinator=SIMPLE_MODEL, sub-agents=SIMPLE_MODEL (no router)
   2. `all_complex`: coordinator=COMPLEX_MODEL, sub-agents=COMPLEX_MODEL (no router)
   3. `coord_simple_subs_complex`: coordinator=SIMPLE_MODEL, sub-agents=COMPLEX_MODEL (no router)
   4. `with_router`: coordinator=SIMPLE_MODEL (`exclude_agents={"coordinator_agent"}`),
      sub-agents dynamically routed by `LayaModelRouterPlugin` between SIMPLE_MODEL and COMPLEX_MODEL.
+  5. `with_decisions_router`: coordinator=SIMPLE_MODEL (`exclude_agents={"coordinator_agent"}`),
+     sub-agents dynamically routed by `DecisionsModelRouterPlugin` (`gemini-decision-1`) between SIMPLE_MODEL and COMPLEX_MODEL.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from google.adk.apps import App
 from google.adk.plugins.base_plugin import BasePlugin
 from google.genai import types
 
+from decisions_adk_model_router.plugin import DecisionsModelRouterPlugin
 from laya_adk_model_router.plugin import (
     COMPLEX_MODEL,
     SIMPLE_MODEL,
@@ -112,7 +115,7 @@ def build_eval_app(
     complex_model: str = COMPLEX_MODEL,
     exclude_agents: set[str] | None = None,
 ) -> App:
-    """Constructs the multi-agent ADK App for one of the 4 evaluation arms.
+    """Constructs the multi-agent ADK App for one of the 5 evaluation arms.
 
     Modes:
       - `all_simple`: Coordinator (`simple_model`) -> Sub-agents (`simple_model`).
@@ -120,6 +123,8 @@ def build_eval_app(
       - `coord_simple_subs_complex`: Coordinator (`simple_model`) -> Sub-agents (`complex_model`) (no router).
       - `with_router`: Coordinator (`simple_model`, excluded from upgrade via `exclude_agents={"coordinator_agent"}`)
         -> Sub-agents dynamically routed by `LayaModelRouterPlugin` between `simple_model` and `complex_model`.
+      - `with_decisions_router`: Coordinator (`simple_model`, excluded from upgrade via `exclude_agents={"coordinator_agent"}`)
+        -> Sub-agents dynamically routed by `DecisionsModelRouterPlugin` (`gemini-decision-1`) between `simple_model` and `complex_model`.
     """
     if use_router is not None:
         mode = "with_router" if use_router else "all_complex"
@@ -133,7 +138,7 @@ def build_eval_app(
     elif mode == "coord_simple_subs_complex":
         coordinator_model = simple_model
         specialist_model = complex_model
-    elif mode == "with_router":
+    elif mode in ("with_router", "with_decisions_router"):
         coordinator_model = simple_model
         specialist_model = complex_model
     else:
@@ -151,6 +156,18 @@ def build_eval_app(
         )
         plugins.append(
             LayaModelRouterPlugin(
+                confidence_threshold=confidence_threshold,
+                simple_model=simple_model,
+                complex_model=complex_model,
+                exclude_agents=active_excluded,
+            )
+        )
+    elif mode == "with_decisions_router":
+        active_excluded = (
+            exclude_agents if exclude_agents is not None else {"coordinator_agent"}
+        )
+        plugins.append(
+            DecisionsModelRouterPlugin(
                 confidence_threshold=confidence_threshold,
                 simple_model=simple_model,
                 complex_model=complex_model,

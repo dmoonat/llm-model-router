@@ -93,32 +93,25 @@ root_agent = Agent(
 
 ---
 
-## Customizing Routing Questions ([`questions.py`](questions.py))
+## Empirical Head-to-Head Benchmark (`Laya` vs. `Gemini Decision 1`, N=60 Tasks)
 
-Edit [`DECISIONS_COMPLEXITY_QUESTIONS`](questions.py) or pass a custom `questions` dictionary to `DecisionsModelRouterPlugin(questions=...)` using either `choice` or `noul` question types from the [Gemini Decisions API specification](https://ai.google.dev/gemini-api/docs/decisions-api#question-types):
+Evaluated on the 60-sample `2x3 Domain x Complexity Matrix` (`ARC-Easy`, `MMLU-Pro`, `GSM8K`, `MATH-500`, `MBPP`, `HumanEval`) in [`eval/EVAL_REPORT.md`](../eval/EVAL_REPORT.md):
 
-```python
-CUSTOM_QUESTIONS = {
-    "complexity": {
-        "type": "choice",
-        "instructions": "How much reasoning depth is required to answer `user_message`?",
-        "criteria": {
-            "simple": "Greetings, routine FAQs, elementary lookups, or short helper snippets.",
-            "complex": "Multi-step math proofs, deep architectural reasoning, or complex debugging.",
-        },
-    }
-}
-```
-
----
-
-## Comparing `laya_adk_model_router` vs. `decisions_adk_model_router`
-
-| Dimension | [`laya_adk_model_router`](../laya_adk_model_router) | [`decisions_adk_model_router`](.) |
+| Dimension | [`laya_adk_model_router`](../laya_adk_model_router) (`laya-typed-decisions`) | [`decisions_adk_model_router`](.) (`gemini-decision-1`) |
 | :--- | :--- | :--- |
-| **Underlying Engine** | Local `laya-typed-decisions` (`convaiinnovations/laya`) | Cloud Google **Gemini Decision 1** (`gemini-decision-1`, `v1beta`) |
+| **Underlying Engine** | Local `laya-typed-decisions` (`421M` ModernBERT-large) | Cloud Google **Gemini Decision 1** (`v1beta`) |
 | **Where It Runs** | On-device (CPU / Apple Silicon MPS / GPU) | Google Gemini Developer API (`POST /v1beta/decisions`) |
-| **Context Window** | Short text turns | Up to **262,144 tokens** (multimodal text, images, audio, video, PDF) |
-| **Routing Cost** | $0.00 (local compute) | **$0.10 / 1M input tokens** (0 output tokens) |
-| **Typical Overhead** | ~60–130 ms (local) | ~150–250 ms (network + single forward pass) |
-| **Question Schema** | Typed `choice` / `noul` / `score` | Native `choice` / `noul` / `score` (up to 1,000 questions/call) |
+| **Context Window** | 1,024 tokens (text) | **262,144 tokens** (multimodal text, images, audio, video, PDF) |
+| **Tier Classification Accuracy (`N=60`)** | **100.0% (60/60)** | **100.0% (60/60)** |
+| **End-to-End Task Accuracy (`N=60`)** | **100.0% (60/60)** (+13.3% vs `All-Simple`) | **100.0% (60/60)** (+13.3% vs `All-Simple`) |
+| **Avg Router Confidence (Min–Max)** | **0.71** (`0.56–0.83`) | **0.9801** (`0.9079–0.9991`) |
+| **Avg Router Latency (p95)** | **102.7 ms** (p95: `151.2 ms`) | **606.9 ms** (p95: `1,144.4 ms`) |
+| **Router Inference Cost (`N=60`)** | **$0.000000** (local compute, 0 output tokens) | **$0.002394** (`23,941` input tokens at `$0.10/1M`, 0 output tokens) |
+| **Total 60-Task Multi-Agent Cost** | **$1.119405** (**-27.5%** vs `All-Complex`) | **$1.069982** (**-30.7%** vs `All-Complex`) |
+| **Simple-Tier Tasks Cost (`N=30`)** | **$0.016566** (**-94.7%** vs `All-Complex`) | **$0.017419** (**-94.4%** vs `All-Complex`) |
+| **Avg End-to-End Turn Latency** | **17,747.2 ms** (**-32.1%** vs `All-Complex`) | **17,742.1 ms** (**-32.1%** vs `All-Complex`) |
+
+```bash
+# Run the 60-sample evaluation for `with_decisions_router` standalone from model_router/:
+python -m eval.run_eval --samples-per-dataset 10 --concurrency 5 --modes with_decisions_router
+```

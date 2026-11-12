@@ -216,20 +216,30 @@ root_agent = Agent(
 
 ## Multi-Agent Benchmark Evaluation (`eval/`)
 
-The [`eval/`](eval/README.md) directory contains a reproducible **4-arm evaluation suite** comparing a 4-Agent ADK hierarchy (`coordinator_agent` $\rightarrow$ `fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) across **45 real open-source Hugging Face benchmark tasks per arm** (`15 ARC-Easy`, `15 MATH-500 Level 5`, `15 HumanEval` = **180 multi-agent turns / 360 LLM calls**), instrumented with **[`adk-finops`](https://pypi.org/project/adk-finops/)**:
+The [`eval/`](eval/README.md) directory contains a reproducible **4-arm evaluation suite** comparing a 4-Agent ADK hierarchy (`coordinator_agent` $\rightarrow$ `fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) with `temperature=0.0` pinned across all agents on **60 real open-source Hugging Face benchmark tasks per arm** (**240 multi-agent turns / 480 LLM calls**) structured as a **2x3 Domain $\times$ Complexity Matrix** (`10 Simple + 10 Complex` per specialist agent), instrumented with **[`adk-finops`](https://pypi.org/project/adk-finops/)**:
 
-| Metric | 1. All-Simple (`gemini-3.1-flash-lite`) | 2. All-Complex (`gemini-3.1-pro-preview`) | 3. Static Hybrid (`Coord=Simple, Subs=Complex`) | 4. With Laya Router (`Coord=Simple, Subs=Laya`) | Router vs. All-Simple | Router vs. All-Complex |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| **Operational Success Rate** | 100.0% (45/45) | 100.0% (45/45) | 100.0% (45/45) | **100.0% (45/45)** | +0.0% | +0.0% |
-| **Ground-Truth Accuracy (%)** | **86.7% (39/45)** | 100.0% (45/45) | 100.0% (45/45) | **100.0% (45/45)** | **+13.3% (+6 tasks)** | **+0.0%** |
-| **ARC-Easy Accuracy (N=15)** | 100.0% (15/15) | 100.0% (15/15) | 100.0% (15/15) | **100.0% (15/15)** | +0.0% | +0.0% |
-| **MATH-500 Level-5 Accuracy (N=15)** | 80.0% (12/15) | 100.0% (15/15) | 100.0% (15/15) | **100.0% (15/15)** | **+20.0% (+3 tasks)** | +0.0% |
-| **HumanEval Accuracy (N=15)** | 80.0% (12/15) | 100.0% (15/15) | 100.0% (15/15) | **100.0% (15/15)** | **+20.0% (+3 tasks)** | +0.0% |
-| **ARC-Easy Cost (N=15)** | $0.006398 | $0.112026 | $0.070452 | **$0.006377** | -0.3% | **-94.3% (-90.9% vs Hybrid)** |
-| **Coordinator Cost (N=45)** | $0.008983 | $0.139766 | $0.008983 | **$0.008983** | 0.0% | **-93.6%** |
-| **Total Cost (USD)** | $0.044651 | $1.520818 | $1.412595 | **$1.413296** | +3065.2% | **-7.1%** |
-| **Avg Turn Latency (ms)** | 4,887.0 ms | 36,310.5 ms | 29,586.4 ms | **27,602.3 ms** | +464.8% | **-24.0% (-6.7% vs Hybrid)** |
-| **Avg Laya Overhead (ms)** | 0.0 ms | 0.0 ms | 0.0 ms | **102.0 ms** | +102.0 ms | **~0.37% of turn** |
+- **`fast_qa_agent` (20 QA tasks)**: `10 ARC-Easy` (`simple`) + `10 MMLU-Pro` (`complex`)
+- **`math_analyst_agent` (20 Math tasks)**: `10 GSM8K` (`simple`) + `10 MATH-500 Level 5` (`complex`)
+- **`code_engineer_agent` (20 Coding tasks)**: `10 MBPP` (`simple`) + `10 HumanEval` (`complex`)
+
+| Metric | 1. All-Simple (`gemini-3.1-flash-lite`) | 2. All-Complex (`gemini-3.1-pro-preview`) | 3. Static Hybrid (`Coord=Simple, Subs=Complex`) | 4. With Laya Router (`Coord=Simple, Subs=Laya`) | Router vs. All-Simple | Router vs. All-Complex | Router vs. Static Hybrid |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Operational Success Rate** | 100.0% (60/60) | 100.0% (60/60) | 100.0% (60/60) | **100.0% (60/60)** | +0.0% | +0.0% | +0.0% |
+| **Ground-Truth Accuracy (%)** | 86.7% (52/60) | 100.0% (60/60) | 100.0% (60/60) | **100.0% (60/60)** | **+13.3% (+8 tasks)** | **+0.0%** | **+0.0%** |
+| **Laya Tier Classification Accuracy** | — | — | — | **100.0% (60/60)** | — | — | — |
+| **Total Cost (USD)** | $0.053324 | $1.543620 | $1.260022 | **$1.119405** | +1999.2% | **-27.5% ($0.424 saved)** | **-11.2% ($0.141 saved)** |
+| **Effective Cost / Correct Answer** | $0.001025 | $0.025727 | $0.021000 | **$0.018657** | +1719.3% | **-27.5%** | **-11.2%** |
+| **Simple-Tier Tasks Cost (`N=30`)** | $0.016474 | $0.313328 | $0.250687 | **$0.016566** | +0.6% | **-94.7%** | **-93.4%** |
+| **Coordinator Agent Cost (`N=60`)** | $0.012187 | $0.164512 | $0.012218 | **$0.012218** | +0.3% | **-92.6%** | **0.0%** |
+| **Thinking Tokens (`thoughts_tokens`)** | 0 | 92,742 | 77,628 | **69,963** | — | **-24.6%** | **-9.9%** |
+| **Avg Turn Latency (ms)** | 4,696.1 ms | 26,118.9 ms | 22,831.1 ms | **17,747.2 ms** | +277.9% | **-32.1% (-8.4s)** | **-22.3% (-5.1s)** |
+| **Avg Laya Overhead (ms)** | 0.0 ms | 0.0 ms | 0.0 ms | **102.7 ms** | +102.7 ms | **~0.58% of turn** | **~0.58% of turn** |
+
+> [!NOTE]
+> **Illustrative Benchmark Disclaimer & Exploring Alternatives:**
+> The multi-agent benchmark shown above is a **simple, illustrative test use case** designed to validate routing mechanics and telemetry—it is **not conclusive across all production workloads or domain distributions**. Because routing effectiveness depends heavily on your prompt distribution, latency SLOs, and task boundaries, we strongly encourage you to:
+> 1. **Evaluate `laya_adk_model_router` on your own use cases and production traffic**, customizing [`LAYA_COMPLEXITY_QUESTIONS`](laya_adk_model_router/questions.py) and `confidence_threshold` for your domain.
+> 2. **Explore and benchmark other routing alternatives**—such as **`jev`** and other lightweight classifiers or semantic/embedding routers—alongside Laya to compare accuracy, latency overhead, and cost savings on your specific workload.
 
 - **Full Evaluation Report**: [`eval/EVAL_REPORT.md`](eval/EVAL_REPORT.md)
 - **Evaluation Suite Instructions**: [`eval/README.md`](eval/README.md)
@@ -238,7 +248,7 @@ The [`eval/`](eval/README.md) directory contains a reproducible **4-arm evaluati
 > The multi-agent hierarchy and 45-sample benchmark (`ARC-Easy`, `MATH-500`, `HumanEval`) shown here are a simplified test setup designed to illustrate how `LayaModelRouterPlugin` and `adk-finops` work together, and the results are **not conclusive across all workloads**. Real-world cost, latency, and accuracy trade-offs depend heavily on your traffic mix (e.g., the ratio of simple vs. complex queries), agent/tool topologies, and domain-specific routing criteria. It is strongly encouraged to customize [`LAYA_COMPLEXITY_QUESTIONS`](laya_adk_model_router/questions.py), evaluate the router directly on your own production use cases, and explore other routing alternatives (such as `jev`) for side-by-side comparison.
 
 ```bash
-# Install evaluation dependencies and run the 4-arm benchmark (uses local cache in eval/data_cache/)
+# Install evaluation dependencies and run the 60-sample 4-arm benchmark (uses local cache in eval/data_cache/)
 uv pip install -r eval/requirements-eval.txt
-python -m eval.run_eval --samples-per-dataset 15 --concurrency 5
+python -m eval.run_eval --samples-per-dataset 10 --concurrency 5
 ```

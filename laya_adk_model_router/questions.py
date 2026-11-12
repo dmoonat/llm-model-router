@@ -11,18 +11,16 @@ LAYA_COMPLEXITY_QUESTIONS: dict[str, dict[str, Any]] = {
         ),
         "criteria": {
             "simple": (
-                "Greetings, small talk, routine FAQs, basic factual lookups, "
-                "elementary science or general-knowledge multiple-choice recall, "
-                "definitions, basic status checks, short translations, reformatting, "
-                "or direct single-step questions that need no multi-step calculation."
+                "Greetings, routine FAQs, elementary 4-option multiple-choice recall, "
+                "brief everyday arithmetic word problems (counting items, basic shopping/sales totals), "
+                "or simple one-liner Python helper snippets (`Provide a brief`)."
             ),
             "complex": (
-                "Multi-step math word problems, arithmetic or algebraic calculations, "
-                "quantitative reasoning, Python/SQL code generation or refactoring, "
-                "debugging, stack traces, kernel panics, log parsing, race conditions, "
-                "memory leaks, system architecture, root-cause analysis, performance "
-                "optimization, math/logic proofs, or multi-step analytical reasoning."
+                "Complex multi-paragraph analytical scenarios with 8 to 10 options (A through J), "
+                "competition or Olympiad-level mathematics problems with LaTeX derivations (`\\frac`, `$...$`), "
+                "or full algorithmic Python engineering specifications with multi-example docstrings and time/space complexity analysis."
             ),
         },
     }
 }
+

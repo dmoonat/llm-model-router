@@ -20,6 +20,7 @@ from adk_finops import FinOpsCostPlugin
 from google.adk.agents import Agent
 from google.adk.apps import App
 from google.adk.plugins.base_plugin import BasePlugin
+from google.genai import types
 
 from laya_adk_model_router.plugin import (
     COMPLEX_MODEL,
@@ -31,34 +32,37 @@ from laya_adk_model_router.plugin import (
 def build_multi_agent_hierarchy(
     coordinator_model: str = COMPLEX_MODEL,
     specialist_model: str = COMPLEX_MODEL,
+    temperature: float = 0.0,
 ) -> Agent:
-    """Creates a fresh 4-agent ADK hierarchy (Coordinator + 3 Specialist Sub-Agents)."""
+    """Creates a fresh 4-agent ADK hierarchy (Coordinator + 3 Specialist Sub-Agents) with deterministic temperature."""
+    gen_config = types.GenerateContentConfig(temperature=temperature)
+
     fast_qa_agent = Agent(
         name="fast_qa_agent",
         model=specialist_model,
+        generate_content_config=gen_config,
         description=(
-            "Specialist sub-agent for direct factual lookups, science questions, "
-            "and multiple-choice questions."
+            "Specialist sub-agent for factual lookups, science/legal/analytical reasoning, "
+            "and multiple-choice questions (`Options:`)."
         ),
         instruction=(
-            "You are a fast, accurate factual and science QA specialist.\n"
-            "- Answer the question concisely in 1-2 sentences.\n"
-            "- When multiple-choice options are provided, always end your response "
-            "with `FINAL_OPTION: <label>` (for example, `FINAL_OPTION: A`)."
+            "You are an accurate factual, scientific, and analytical multiple-choice QA specialist.\n"
+            "- Carefully evaluate the question and all provided options.\n"
+            "- Always end your response with `FINAL_OPTION: <label>` (for example, `FINAL_OPTION: A`)."
         ),
     )
 
     math_analyst_agent = Agent(
         name="math_analyst_agent",
         model=specialist_model,
+        generate_content_config=gen_config,
         description=(
-            "Specialist sub-agent for multi-step mathematical word problems, "
-            "algebraic reasoning, and quantitative analysis."
+            "Specialist sub-agent for arithmetic word problems, competition mathematics, "
+            "algebraic reasoning, and quantitative analysis (`FINAL_ANSWER:`)."
         ),
         instruction=(
             "You are a mathematical reasoning specialist.\n"
-            "- Break down multi-step word problems step-by-step.\n"
-            "- Verify intermediate arithmetic carefully.\n"
+            "- Solve the mathematical problem step-by-step and verify intermediate arithmetic.\n"
             "- Always conclude your response with `FINAL_ANSWER: <number>` "
             "(using only the final numeric value, e.g. `FINAL_ANSWER: 42`)."
         ),
@@ -67,30 +71,31 @@ def build_multi_agent_hierarchy(
     code_engineer_agent = Agent(
         name="code_engineer_agent",
         model=specialist_model,
+        generate_content_config=gen_config,
         description=(
-            "Specialist sub-agent for Python code generation, algorithm design, "
-            "and time/space complexity analysis."
+            "Specialist sub-agent for Python code generation, utility functions, "
+            "and algorithm design (`Required function signature:`)."
         ),
         instruction=(
             "You are a senior Python software engineer.\n"
             "- Implement the requested Python function using the exact function signature specified.\n"
             "- Enclose the complete, self-contained Python implementation inside a "
-            "```python ... ``` code block (including any needed standard library imports).\n"
-            "- Briefly state the time and space complexity after the code block."
+            "```python ... ``` code block (including any needed standard library imports)."
         ),
     )
 
     coordinator_agent = Agent(
         name="coordinator_agent",
         model=coordinator_model,
+        generate_content_config=gen_config,
         description="Root orchestrator that delegates user requests to the right specialist sub-agent.",
         instruction=(
             "You are the Root Coordinator for a team of specialist agents.\n"
             "Do NOT answer the user's question directly. Instead, immediately delegate "
             "to the appropriate specialist sub-agent using `transfer_to_agent`:\n"
-            "1. Transfer to `fast_qa_agent` for factual/science questions or multiple-choice questions (`Options:`).\n"
-            "2. Transfer to `math_analyst_agent` for multi-step math word problems (`FINAL_ANSWER:`).\n"
-            "3. Transfer to `code_engineer_agent` for Python programming and algorithm tasks (`Required function signature:`)."
+            "1. Transfer to `fast_qa_agent` for multiple-choice questions (`Options:` / `FINAL_OPTION:`).\n"
+            "2. Transfer to `math_analyst_agent` for math problems (`FINAL_ANSWER:`).\n"
+            "3. Transfer to `code_engineer_agent` for Python programming tasks (`Required function signature:`)."
         ),
         sub_agents=[fast_qa_agent, math_analyst_agent, code_engineer_agent],
     )

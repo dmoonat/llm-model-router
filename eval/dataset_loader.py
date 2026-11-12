@@ -1,9 +1,15 @@
 """Open-source benchmark dataset loader and deterministic ground-truth verifiers.
 
-Fetches real test-split rows from Hugging Face Datasets Server REST API:
-1. ARC-Easy (`allenai/ai2_arc`, config=`ARC-Easy`, split=`test`) — Simple science/factual MCQs
-2. MATH-500 (`HuggingFaceH4/MATH-500`, config=`default`, split=`test`, Level 5) — Olympiad competition math
-3. HumanEval (`openai/openai_humaneval`, config=`openai_humaneval`, split=`test`) — Python algorithm & code generation
+2x3 Domain x Complexity Benchmark Suite (60 samples total = 20 per specialist agent):
+1. QA Domain (`fast_qa_agent`):
+   - Simple QA: ARC-Easy (`allenai/ai2_arc`, `ARC-Easy`, `test`) — 4-option elementary science MCQs
+   - Complex QA: MMLU-Pro (`TIGER-Lab/MMLU-Pro`, `test`) — 10-option multi-paragraph analytical case reasoning
+2. Math Domain (`math_analyst_agent`):
+   - Simple Math: GSM8K (`openai/gsm8k`, `main`, `test`) — Everyday arithmetic word problems
+   - Complex Math: MATH-500 (`HuggingFaceH4/MATH-500`, `test`, Level 5) — Olympiad competition math
+3. Coding Domain (`code_engineer_agent`):
+   - Simple Coding: MBPP (`google-research-datasets/mbpp`, `sanitized`, `test`) — Basic Python helper functions
+   - Complex Coding: HumanEval (`openai/openai_humaneval`, `test`) — Multi-constraint algorithmic Python engineering
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ logger = logging.getLogger(__name__)
 _EVAL_DIR = Path(__file__).resolve().parent
 DEFAULT_CACHE_PATH = _EVAL_DIR / "data_cache" / "benchmark_samples_v2.json"
 HF_ROWS_ENDPOINT = "https://datasets-server.huggingface.co/rows"
-DATASET_NAMES = ("ARC-Easy", "MATH-500", "HumanEval")
+DATASET_NAMES = ("ARC-Easy", "MMLU-Pro", "GSM8K", "MATH-500", "MBPP", "HumanEval")
 
 
 @dataclass
@@ -252,12 +258,147 @@ def load_humaneval_samples(
     return samples
 
 
-def load_benchmark_suite(
-    samples_per_dataset: int = 15,
+def load_mmlu_pro_samples(
+    limit: int = 10,
     cache_path: Path = DEFAULT_CACHE_PATH,
     refresh_cache: bool = False,
 ) -> list[BenchmarkSample]:
-    """Loads the stratified open-source benchmark suite from local cache if available, otherwise downloads from Hugging Face Hub."""
+    """Loads complex 10-option analytical reasoning questions from local cache or `TIGER-Lab/MMLU-Pro` (`test` split)."""
+    if not refresh_cache:
+        cached = _read_cached_samples(cache_path).get("MMLU-Pro", [])
+        if len(cached) >= limit:
+            logger.info("Loaded %d MMLU-Pro samples from local cache (%s).", limit, cache_path)
+            return cached[:limit]
+
+    logger.info("Downloading %d MMLU-Pro samples from Hugging Face Hub...", limit)
+    rows = _fetch_hf_rows("TIGER-Lab/MMLU-Pro", "default", "test", length=max(limit * 5, 60), offset=1500)
+    samples: list[BenchmarkSample] = []
+    for row in rows:
+        if len(samples) >= limit:
+            break
+        q_text = str(row.get("question", "")).strip()
+        opts = row.get("options") or []
+        ans = str(row.get("answer", "")).strip().upper()
+        qid = row.get("question_id", len(samples))
+        if len(q_text) < 450 or len(opts) < 8 or not ans:
+            continue
+        labels = [chr(ord("A") + i) for i in range(len(opts))]
+        options_str = "\n".join(f"{lbl}) {txt}" for lbl, txt in zip(labels, opts))
+        prompt = (
+            "Analyze the following complex scenario step-by-step, evaluate the competing principles across all options, "
+            "and conclude with `FINAL_OPTION: <label>`:\n\n"
+            f"Question: {q_text}\n\n"
+            f"Options:\n{options_str}"
+        )
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"mmlu_pro_{qid}",
+                dataset="MMLU-Pro",
+                expected_complexity="complex",
+                expected_sub_agent="fast_qa_agent",
+                prompt=prompt,
+                ground_truth=ans,
+                source_url="https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro",
+            )
+        )
+    return samples
+
+
+def load_gsm8k_samples(
+    limit: int = 10,
+    cache_path: Path = DEFAULT_CACHE_PATH,
+    refresh_cache: bool = False,
+) -> list[BenchmarkSample]:
+    """Loads elementary grade-school arithmetic word problems from local cache or `openai/gsm8k` (`test` split)."""
+    if not refresh_cache:
+        cached = _read_cached_samples(cache_path).get("GSM8K", [])
+        if len(cached) >= limit:
+            logger.info("Loaded %d GSM8K samples from local cache (%s).", limit, cache_path)
+            return cached[:limit]
+
+    logger.info("Downloading %d GSM8K samples from Hugging Face Hub...", limit)
+    rows = _fetch_hf_rows("openai/gsm8k", "main", "test", length=max(limit * 2, 20))
+    samples: list[BenchmarkSample] = []
+    for idx, row in enumerate(rows):
+        if len(samples) >= limit:
+            break
+        question = str(row.get("question", "")).strip()
+        raw_answer = str(row.get("answer", "")).strip()
+        if "####" not in raw_answer or not question:
+            continue
+        gold = raw_answer.split("####")[-1].strip().replace(",", "")
+        prompt = (
+            f"Question: {question}\n\n"
+            "Provide a brief calculation and end with `FINAL_ANSWER: <number>`."
+        )
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"gsm8k_{idx}",
+                dataset="GSM8K",
+                expected_complexity="simple",
+                expected_sub_agent="math_analyst_agent",
+                prompt=prompt,
+                ground_truth=gold,
+                source_url="https://huggingface.co/datasets/openai/gsm8k",
+            )
+        )
+    return samples
+
+
+def load_mbpp_samples(
+    limit: int = 10,
+    cache_path: Path = DEFAULT_CACHE_PATH,
+    refresh_cache: bool = False,
+) -> list[BenchmarkSample]:
+    """Loads simple Python helper function tasks from local cache or `google-research-datasets/mbpp` (`test` split)."""
+    if not refresh_cache:
+        cached = _read_cached_samples(cache_path).get("MBPP", [])
+        if len(cached) >= limit:
+            logger.info("Loaded %d MBPP samples from local cache (%s).", limit, cache_path)
+            return cached[:limit]
+
+    logger.info("Downloading %d MBPP samples from Hugging Face Hub...", limit)
+    rows = _fetch_hf_rows("google-research-datasets/mbpp", "sanitized", "test", length=max(limit * 2, 20))
+    samples: list[BenchmarkSample] = []
+    for row in rows:
+        if len(samples) >= limit:
+            break
+        task_id = row.get("task_id", len(samples))
+        desc = str(row.get("prompt", "")).strip()
+        code = str(row.get("code", "")).strip()
+        test_list = [str(t) for t in (row.get("test_list") or []) if str(t).strip()]
+        test_imports = [str(imp) for imp in (row.get("test_imports") or []) if str(imp).strip()]
+        if not desc or not code or not test_list:
+            continue
+        sig = _extract_function_signature(code)
+        prompt = (
+            f"Task: {desc}\n"
+            f"Required function signature: `{sig}`\n"
+            f"Example test assertion your function must pass: `{test_list[0]}`\n\n"
+            "Provide a brief Python one-liner or helper function inside a ```python ... ``` block."
+        )
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"mbpp_{task_id}",
+                dataset="MBPP",
+                expected_complexity="simple",
+                expected_sub_agent="code_engineer_agent",
+                prompt=prompt,
+                ground_truth=sig,
+                test_assertions=test_list,
+                test_imports=test_imports,
+                source_url="https://huggingface.co/datasets/google-research-datasets/mbpp",
+            )
+        )
+    return samples
+
+
+def load_benchmark_suite(
+    samples_per_dataset: int = 10,
+    cache_path: Path = DEFAULT_CACHE_PATH,
+    refresh_cache: bool = False,
+) -> list[BenchmarkSample]:
+    """Loads the 2x3 Domain x Complexity open-source benchmark suite from local cache if available, otherwise downloads from Hugging Face Hub."""
     if not refresh_cache and cache_path.exists():
         by_ds = _read_cached_samples(cache_path)
         if all(len(by_ds.get(ds, [])) >= samples_per_dataset for ds in DATASET_NAMES):
@@ -272,12 +413,15 @@ def load_benchmark_suite(
             )
             return selected
 
-    fetch_count = max(samples_per_dataset, 15)
+    fetch_count = max(samples_per_dataset, 10)
     arc_samples = load_arc_easy_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
+    mmlu_samples = load_mmlu_pro_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
+    gsm_samples = load_gsm8k_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
     math_samples = load_math500_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
+    mbpp_samples = load_mbpp_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
     he_samples = load_humaneval_samples(limit=fetch_count, cache_path=cache_path, refresh_cache=refresh_cache)
 
-    all_fetched = arc_samples + math_samples + he_samples
+    all_fetched = arc_samples + mmlu_samples + gsm_samples + math_samples + mbpp_samples + he_samples
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(
         json.dumps([asdict(s) for s in all_fetched], indent=2),
@@ -287,7 +431,10 @@ def load_benchmark_suite(
 
     return (
         arc_samples[:samples_per_dataset]
+        + mmlu_samples[:samples_per_dataset]
+        + gsm_samples[:samples_per_dataset]
         + math_samples[:samples_per_dataset]
+        + mbpp_samples[:samples_per_dataset]
         + he_samples[:samples_per_dataset]
     )
 
@@ -297,16 +444,16 @@ def load_benchmark_suite(
 # ---------------------------------------------------------------------------
 
 def verify_arc_easy(response_text: str, answer_key: str) -> tuple[bool, str]:
-    """Checks whether the model selected the correct multiple-choice option label."""
+    """Checks whether the model selected the correct multiple-choice option label (A-J or 1-9)."""
     gold = answer_key.strip().upper()
     if not response_text.strip():
         return False, ""
 
     patterns = [
-        r"FINAL_OPTION\s*:\s*\**([A-D1-4])\**",
-        r"(?i)\b(?:correct\s+)?(?:option|answer|choice)\s*(?:is|:)\s*\**([A-D1-4])\b",
-        r"\*\*([A-D1-4])\)",
-        r"(?:^|\s)([A-D1-4])\)\s",
+        r"FINAL_OPTION\s*:\s*\**([A-J1-9])\**",
+        r"(?i)\b(?:correct\s+)?(?:option|answer|choice)\s*(?:is|:)\s*\**([A-J1-9])\b",
+        r"\*\*([A-J1-9])\)",
+        r"(?:^|\s)([A-J1-9])\)\s",
     ]
     for pat in patterns:
         matches = re.findall(pat, response_text)
@@ -315,7 +462,7 @@ def verify_arc_easy(response_text: str, answer_key: str) -> tuple[bool, str]:
             return pred == gold, pred
 
     last_line = response_text.strip().splitlines()[-1]
-    m = re.search(r"\b([A-D1-4])\b", last_line)
+    m = re.search(r"\b([A-J1-9])\b", last_line)
     if m:
         pred = m.group(1).upper()
         return pred == gold, pred
@@ -396,7 +543,7 @@ def verify_code_assertions(
 
 def verify_sample(sample: BenchmarkSample, response_text: str) -> tuple[bool, str]:
     """Dispatches verification to the dataset-specific ground-truth checker."""
-    if sample.dataset == "ARC-Easy":
+    if sample.dataset in ("ARC-Easy", "MMLU-Pro"):
         return verify_arc_easy(response_text, sample.ground_truth)
     if sample.dataset in ("MATH-500", "GSM8K"):
         return verify_math_numeric(response_text, sample.ground_truth)

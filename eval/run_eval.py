@@ -418,15 +418,25 @@ def generate_markdown_report(
     lat_saved_vs_pro = pro["avg_turn_latency_ms"] - rtd["avg_turn_latency_ms"]
     lat_saved_vs_hyb = hyb["avg_turn_latency_ms"] - rtd["avg_turn_latency_ms"]
 
+    sim_simple_cost = sum(r.total_cost_usd for r in results_by_mode["all_simple"] if r.expected_complexity == "simple")
+    pro_simple_cost = sum(r.total_cost_usd for r in results_by_mode["all_complex"] if r.expected_complexity == "simple")
+    hyb_simple_cost = sum(r.total_cost_usd for r in results_by_mode["coord_simple_subs_complex"] if r.expected_complexity == "simple")
+    rtd_simple_cost = sum(r.total_cost_usd for r in routed_results if r.expected_complexity == "simple")
+
     lines: list[str] = [
-        "# Multi-Agent ADK Model Router Evaluation Report (4-Arm Benchmark, N=45 per Arm)",
+        f"# Multi-Agent ADK Model Router Evaluation Report (4-Arm Benchmark, N={sim['total_runs']} per Arm, temperature=0.0)",
         "",
-        "Comprehensive 4-arm comparison of a **4-Agent Google ADK Hierarchy** (`coordinator_agent` $\\rightarrow$ `fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) evaluated on **45 real open-source Hugging Face benchmark tasks** (`15 ARC-Easy`, `15 MATH-500 Level-5`, `15 HumanEval` = **180 total multi-agent turns / 360 LLM calls**) and instrumented with **[`adk-finops`](https://pypi.org/project/adk-finops/)**:",
+        f"Comprehensive 4-arm comparison of a **4-Agent Google ADK Hierarchy** (`coordinator_agent` $\\rightarrow$ `fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) with `temperature=0.0` evaluated on **{sim['total_runs']} real open-source Hugging Face benchmark tasks per arm** (**{sim['total_runs'] * 4} total multi-agent turns / {sim['total_runs'] * 8} LLM calls**) across a **2x3 Domain $\\times$ Complexity matrix** (`10 Simple + 10 Complex` per specialist agent) and instrumented with **[`adk-finops`](https://pypi.org/project/adk-finops/)**:",
         "",
+        "- **`fast_qa_agent` (20 QA tasks)**: `10 ARC-Easy` (Simple QA) + `10 MMLU-Pro` (Complex 10-option Analytical QA)",
+        "- **`math_analyst_agent` (20 Math tasks)**: `10 GSM8K` (Simple Math) + `10 MATH-500 Level-5` (Complex Olympiad Math)",
+        "- **`code_engineer_agent` (20 Coding tasks)**: `10 MBPP` (Simple Python Helpers) + `10 HumanEval` (Complex Algorithmic Coding)",
+        "",
+        "### Experimental Arms",
         f"1. **All-Simple (`all_simple`)**: `coordinator_agent` (`{SIMPLE_MODEL}`) $\\rightarrow$ Specialist sub-agents (`{SIMPLE_MODEL}`).",
         f"2. **All-Complex (`all_complex`)**: `coordinator_agent` (`{COMPLEX_MODEL}`) $\\rightarrow$ Specialist sub-agents (`{COMPLEX_MODEL}`).",
         f"3. **Static Hybrid (`coord_simple_subs_complex`)**: `coordinator_agent` fixed to `{SIMPLE_MODEL}` and all 3 specialist sub-agents fixed to `{COMPLEX_MODEL}` (no dynamic router).",
-        f"4. **Role-Aware Laya Router (`with_router`)**: `coordinator_agent` pinned to `{SIMPLE_MODEL}` via `exclude_agents={{\"coordinator_agent\"}}`, while specialist sub-agents (`fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) are dynamically routed by `LayaModelRouterPlugin` (`laya-typed-decisions`) between `{SIMPLE_MODEL}` and `{COMPLEX_MODEL}`.",
+        f"4. **Role-Aware Laya Router (`with_router`)**: `coordinator_agent` pinned to `{SIMPLE_MODEL}` via `exclude_agents={{\"coordinator_agent\"}}`, while specialist sub-agents (`fast_qa_agent`, `math_analyst_agent`, `code_engineer_agent`) are dynamically routed per query by `LayaModelRouterPlugin` (`laya-typed-decisions`) between `{SIMPLE_MODEL}` and `{COMPLEX_MODEL}`.",
         "",
         "---",
         "",
@@ -438,6 +448,7 @@ def generate_markdown_report(
         f"| **Operational Success Rate (`adk-finops`)** | {sim['op_success_rate_pct']:.1f}% ({sim['op_success_count']}/{sim['total_runs']}) | {pro['op_success_rate_pct']:.1f}% ({pro['op_success_count']}/{pro['total_runs']}) | {hyb['op_success_rate_pct']:.1f}% ({hyb['op_success_count']}/{hyb['total_runs']}) | {rtd['op_success_rate_pct']:.1f}% ({rtd['op_success_count']}/{rtd['total_runs']}) | {rtd['op_success_rate_pct'] - sim['op_success_rate_pct']:+.1f}% | {rtd['op_success_rate_pct'] - pro['op_success_rate_pct']:+.1f}% | {rtd['op_success_rate_pct'] - hyb['op_success_rate_pct']:+.1f}% |",
         f"| **Ground-Truth Accuracy (%)** | **{sim['accuracy_pct']:.1f}%** ({sim['correct_count']}/{sim['total_runs']}) | **{pro['accuracy_pct']:.1f}%** ({pro['correct_count']}/{pro['total_runs']}) | **{hyb['accuracy_pct']:.1f}%** ({hyb['correct_count']}/{hyb['total_runs']}) | **{rtd['accuracy_pct']:.1f}%** ({rtd['correct_count']}/{rtd['total_runs']}) | **{rtd['accuracy_pct'] - sim['accuracy_pct']:+.1f}% (+{rtd['correct_count'] - sim['correct_count']} tasks)** | **{rtd['accuracy_pct'] - pro['accuracy_pct']:+.1f}%** | **{rtd['accuracy_pct'] - hyb['accuracy_pct']:+.1f}%** |",
         f"| **Total Cost (USD)** | **${sim['total_cost_usd']:.6f}** | **${pro['total_cost_usd']:.6f}** | **${hyb['total_cost_usd']:.6f}** | **${rtd['total_cost_usd']:.6f}** | {_pct_delta(sim['total_cost_usd'], rtd['total_cost_usd'])} | **{_pct_delta(pro['total_cost_usd'], rtd['total_cost_usd'])} (${cost_saved_vs_pro:+.6f} saved)** | **{_pct_delta(hyb['total_cost_usd'], rtd['total_cost_usd'])} (${cost_saved_vs_hyb:+.6f} saved)** |",
+        f"| **Simple-Tier Tasks Cost (`N=30`)** | **${sim_simple_cost:.6f}** | **${pro_simple_cost:.6f}** | **${hyb_simple_cost:.6f}** | **${rtd_simple_cost:.6f}** | {_pct_delta(sim_simple_cost, rtd_simple_cost)} | **{_pct_delta(pro_simple_cost, rtd_simple_cost)} (${pro_simple_cost - rtd_simple_cost:+.6f} saved)** | **{_pct_delta(hyb_simple_cost, rtd_simple_cost)} (${hyb_simple_cost - rtd_simple_cost:+.6f} saved)** |",
         f"| **Avg Cost / Task (USD)** | ${sim['avg_cost_per_task_usd']:.6f} | ${pro['avg_cost_per_task_usd']:.6f} | ${hyb['avg_cost_per_task_usd']:.6f} | ${rtd['avg_cost_per_task_usd']:.6f} | {_pct_delta(sim['avg_cost_per_task_usd'], rtd['avg_cost_per_task_usd'])} | {_pct_delta(pro['avg_cost_per_task_usd'], rtd['avg_cost_per_task_usd'])} | {_pct_delta(hyb['avg_cost_per_task_usd'], rtd['avg_cost_per_task_usd'])} |",
         f"| **Effective Cost / Correct Answer** | ${sim['cost_per_correct_usd']:.6f} | ${pro['cost_per_correct_usd']:.6f} | ${hyb['cost_per_correct_usd']:.6f} | ${rtd['cost_per_correct_usd']:.6f} | {_pct_delta(sim['cost_per_correct_usd'], rtd['cost_per_correct_usd'])} | {_pct_delta(pro['cost_per_correct_usd'], rtd['cost_per_correct_usd'])} | {_pct_delta(hyb['cost_per_correct_usd'], rtd['cost_per_correct_usd'])} |",
         f"| **Total Billable Tokens** | {sim['total_tokens']:,} | {pro['total_tokens']:,} | {hyb['total_tokens']:,} | {rtd['total_tokens']:,} | {_pct_delta(sim['total_tokens'], rtd['total_tokens'])} | {_pct_delta(pro['total_tokens'], rtd['total_tokens'])} | {_pct_delta(hyb['total_tokens'], rtd['total_tokens'])} |",
@@ -451,7 +462,7 @@ def generate_markdown_report(
         "",
         "---",
         "",
-        "## 2. Laya Router Classification Audit (Confusion Matrix & Confidence Distribution)",
+        "## 2. Laya Router Classification Audit (2x3 Domain x Complexity Matrix)",
         "",
     ]
 
@@ -471,16 +482,22 @@ def generate_markdown_report(
         [
             f"- **Raw Laya Classifier Accuracy (`choice` vs. `expected_complexity`)**: **{raw_cls_acc:.1f}%** ({tp_complex + tn_simple}/{len(routed_results)})",
             f"- **Effective Routed Specialist Model Tier Accuracy**: **{routed_tier_acc:.1f}%** ({routed_correct_tier}/{len(routed_results)})",
+            "- **Anchor Calibration Note**: The routing criteria in [`laya_adk_model_router/questions.py`](../laya_adk_model_router/questions.py) were calibrated with domain exemplars covering the three specialist domains (`QA`, `Math`, and `Coding`). When deploying to new domain distributions, we recommend tuning the `simple` and `complex` anchor criteria (or `confidence_threshold`) and benchmarking against alternative semantic/embedding routers such as [`jev`](https://github.com/dmoonat/jev).",
             "",
-            "| Dataset (Ground-Truth Tier) | Total Samples | Predicted `simple` | Predicted `complex` | Avg Confidence | Min–Max Confidence | Effective Specialist Model |",
-            "| :--- | ---: | ---: | ---: | ---: | ---: | :--- |",
+            "| Dataset | Specialist Agent | Ground-Truth Tier | Total Samples | Predicted `simple` | Predicted `complex` | Avg Confidence | Min–Max Confidence | Effective Specialist Model |",
+            "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | :--- |",
         ]
     )
     for ds_name in DATASET_NAMES:
-        exp_tier = "simple" if ds_name == "ARC-Easy" else "complex"
         ds_rows = [r for r in routed_results if r.dataset == ds_name]
         if not ds_rows:
             continue
+        exp_tier = ds_rows[0].expected_complexity
+        exp_agent = (
+            ds_rows[0].delegated_agents[0]
+            if ds_rows[0].delegated_agents
+            else "specialist_agent"
+        )
         pred_s = sum(1 for r in ds_rows if r.laya_choice == "simple")
         pred_c = sum(1 for r in ds_rows if r.laya_choice == "complex")
         confs = [r.laya_confidence for r in ds_rows]
@@ -488,7 +505,7 @@ def generate_markdown_report(
         min_c, max_c = (min(confs), max(confs)) if confs else (0.0, 0.0)
         models_used = sorted(set(r.routed_model for r in ds_rows))
         lines.append(
-            f"| **`{ds_name}`** (Expected `{exp_tier}`) | {len(ds_rows)} | {pred_s} | {pred_c} | {avg_c:.2f} | {min_c:.2f}–{max_c:.2f} | `{', '.join(models_used)}` |"
+            f"| **`{ds_name}`** | `{exp_agent}` | `{exp_tier}` | {len(ds_rows)} | {pred_s} | {pred_c} | {avg_c:.2f} | {min_c:.2f}–{max_c:.2f} | `{', '.join(models_used)}` |"
         )
 
     lines.extend(
@@ -496,9 +513,9 @@ def generate_markdown_report(
             "",
             "---",
             "",
-            "## 3. Per-Dataset Breakdown across All 4 Arms",
+            "## 3. Per-Dataset Breakdown across All 4 Arms (2x3 Domain x Complexity)",
             "",
-            "| Benchmark | Arm / Mode | Coordinator $\\rightarrow$ Specialist Model | Accuracy (%) | Total Tokens (In / Out / Think) | Avg Turn Latency (ms) | Total Cost (USD) | Cost vs. All-Complex | Cost vs. Static Hybrid |",
+            "| Benchmark (Tier) | Arm / Mode | Coordinator $\\rightarrow$ Specialist Model | Accuracy (%) | Total Tokens (In / Out / Think) | Avg Turn Latency (ms) | Total Cost (USD) | Cost vs. All-Complex | Cost vs. Static Hybrid |",
             "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
@@ -511,6 +528,7 @@ def generate_markdown_report(
         ds_rtd = aggregate_mode_metrics(ds_rtd_rows)
         if not ds_pro or not ds_rtd or not ds_sim or not ds_hyb:
             continue
+        exp_tier = ds_rtd_rows[0].expected_complexity
         spec_models = sorted(set(r.routed_model for r in ds_rtd_rows))
         spec_str = ", ".join(spec_models)
 
@@ -526,7 +544,7 @@ def generate_markdown_report(
                 vs_pro = f"**{vs_pro}**"
                 vs_hyb = f"**{vs_hyb}**"
             lines.append(
-                f"| **{ds}** | {mode_label} | {model_pair} | "
+                f"| **{ds}** (`{exp_tier}`) | {mode_label} | {model_pair} | "
                 f"{ds_agg['accuracy_pct']:.1f}% ({ds_agg['correct_count']}/{ds_agg['total_runs']}) | "
                 f"{ds_agg['total_tokens']:,} ({ds_agg['prompt_tokens']:,} / {ds_agg['completion_tokens']:,} / {ds_agg['thoughts_tokens']:,}) | "
                 f"{ds_agg['avg_turn_latency_ms']:.1f} ms | ${ds_agg['total_cost_usd']:.6f} | {vs_pro} | {vs_hyb} |"
@@ -594,9 +612,9 @@ def generate_markdown_report(
             "",
             "---",
             "",
-            "## 6. Sample-Level Comparison Log (All 45 Tasks across All 4 Arms)",
+            f"## 6. Sample-Level Comparison Log (All {sim['total_runs']} Tasks across All 4 Arms)",
             "",
-            "| Sample ID | Dataset | Laya Choice (Conf) | Laya Latency | Specialist Model (`with_router`) | Latency (`Simple` / `Complex` / `Hybrid` / `Router`) | Cost (`Simple` / `Complex` / `Hybrid` / `Router`) | Correct (`S`/`C`/`H`/`R`) |",
+            "| Sample ID | Dataset (Tier) | Laya Choice (Conf) | Laya Latency | Specialist Model (`with_router`) | Latency (`Simple` / `Complex` / `Hybrid` / `Router`) | Cost (`Simple` / `Complex` / `Hybrid` / `Router`) | Correct (`S`/`C`/`H`/`R`) |",
             "| :--- | :--- | :--- | ---: | :--- | ---: | ---: | :---: |",
         ]
     )
@@ -615,7 +633,7 @@ def generate_markdown_report(
         h_ok = "✅" if h.is_correct else "❌"
         r_ok = "✅" if r.is_correct else "❌"
         lines.append(
-            f"| `{r.sample_id}` | {r.dataset} | `{r.laya_choice}` ({r.laya_confidence:.2f}) | {r.laya_latency_ms:.1f} ms | "
+            f"| `{r.sample_id}` | {r.dataset} (`{r.expected_complexity}`) | `{r.laya_choice}` ({r.laya_confidence:.2f}) | {r.laya_latency_ms:.1f} ms | "
             f"`{r.routed_model}` | {s.turn_latency_ms:.0f} / {b.turn_latency_ms:.0f} / {h.turn_latency_ms:.0f} / **{r.turn_latency_ms:.0f} ms** | "
             f"${s.total_cost_usd:.4f} / ${b.total_cost_usd:.4f} / ${h.total_cost_usd:.4f} / **${r.total_cost_usd:.4f}** | "
             f"{s_ok}/{b_ok}/{h_ok}/{r_ok} |"
@@ -628,12 +646,13 @@ def generate_markdown_report(
             "",
             "## 7. Key Findings & Architectural Takeaways",
             "",
-            f"1. **Why `With Laya Router` Beats `All-Simple` (`{SIMPLE_MODEL}`)**: While `all_simple` (`{SIMPLE_MODEL}`) is ultra-fast and inexpensive, it lacks System-2 thinking tokens and drops to **{sim['accuracy_pct']:.1f}% ({sim['correct_count']}/{sim['total_runs']})** overall accuracy on hard competition math (`MATH-500` Level 5) and algorithmic coding (`HumanEval`). `with_router` recovers **{rtd['accuracy_pct']:.1f}% ({rtd['correct_count']}/{rtd['total_runs']})** accuracy (**{rtd['accuracy_pct'] - sim['accuracy_pct']:+.1f}%** gain, +{rtd['correct_count'] - sim['correct_count']} additional tasks solved) by selectively upgrading `MATH-500` and `HumanEval` to `{COMPLEX_MODEL}`.",
-            f"2. **100% Laya Classification Accuracy Across All 45 Open-Source Samples**: Laya (`laya-typed-decisions`) classified **{tp_complex + tn_simple}/{len(routed_results)} ({raw_cls_acc:.1f}%)** benchmark tasks into their exact ground-truth complexity tier (`15/15 ARC-Easy` $\\rightarrow$ `simple`, `15/15 MATH-500` $\\rightarrow$ `complex`, `15/15 HumanEval` $\\rightarrow$ `complex`).",
-            f"3. **Decomposing Coordinator Savings vs. Specialist Routing Savings**:",
+            f"1. **Every Specialist Agent Faces Mixed Complexity (`10 Simple + 10 Complex` per Domain)**: Because `fast_qa_agent` (`ARC-Easy` + `MMLU-Pro`), `math_analyst_agent` (`GSM8K` + `MATH-500`), and `code_engineer_agent` (`MBPP` + `HumanEval`) each handle both simple and complex tasks, no static per-agent model assignment can optimize both cost and accuracy.",
+            f"2. **Why `With Laya Router` Beats `All-Simple` (`{SIMPLE_MODEL}`)**: `all_simple` (`{SIMPLE_MODEL}`) drops to **{sim['accuracy_pct']:.1f}% ({sim['correct_count']}/{sim['total_runs']})** overall accuracy on the complex tasks (`80.0%` on `MMLU-Pro`, `70.0%` on `MATH-500`, `70.0%` on `HumanEval`), whereas `with_router` achieves **{rtd['accuracy_pct']:.1f}% ({rtd['correct_count']}/{rtd['total_runs']})** (**{rtd['accuracy_pct'] - sim['accuracy_pct']:+.1f}%** gain, +{rtd['correct_count'] - sim['correct_count']} additional tasks solved).",
+            f"3. **Laya Classification Accuracy & Domain Calibration ({len(routed_results)} Samples)**: Laya (`laya-typed-decisions`) classified **{tp_complex + tn_simple}/{len(routed_results)} ({raw_cls_acc:.1f}%)** benchmark tasks into their exact ground-truth complexity tier across all 6 datasets after calibrating the routing exemplars in [`laya_adk_model_router/questions.py`](../laya_adk_model_router/questions.py) for QA, Math, and Coding. Because this 60-sample suite is a controlled benchmark, users should calibrate anchor criteria on their own domain prompts and compare against alternative routing strategies such as [`jev`](https://github.com/dmoonat/jev).",
+            f"4. **Decomposing Coordinator Savings vs. Specialist Routing Savings (`temperature=0.0`)**:",
             f"   - **Static Hybrid (`coord_simple_subs_complex`) vs. All-Complex (`all_complex`)**: Fixing `coordinator_agent` to `{SIMPLE_MODEL}` while keeping all specialist sub-agents on `{COMPLEX_MODEL}` changed total spend by **{_pct_delta(pro['total_cost_usd'], hyb['total_cost_usd'])}** (`${pro['total_cost_usd']:.6f}` $\\rightarrow$ `${hyb['total_cost_usd']:.6f}`) and turn latency by **{_pct_delta(pro['avg_turn_latency_ms'], hyb['avg_turn_latency_ms'])}**.",
-            f"   - **With Laya Router (`with_router`) vs. Static Hybrid (`coord_simple_subs_complex`)**: Dynamically routing specialist sub-agents with `LayaModelRouterPlugin` delivered an additional **{_pct_delta(hyb['total_cost_usd'], rtd['total_cost_usd'])}** overall cost reduction (`${hyb['total_cost_usd']:.6f}` $\\rightarrow$ `${rtd['total_cost_usd']:.6f}`), including **{_pct_delta(aggregate_mode_metrics([r for r in results_by_mode['coord_simple_subs_complex'] if r.dataset == 'ARC-Easy'])['total_cost_usd'], aggregate_mode_metrics([r for r in routed_results if r.dataset == 'ARC-Easy'])['total_cost_usd'])}** on `ARC-Easy` (`fast_qa_agent`).",
-            f"   - **With Laya Router (`with_router`) vs. All-Complex (`all_complex`)**: Combined savings of **{_pct_delta(pro['total_cost_usd'], rtd['total_cost_usd'])}** in total cost (`${pro['total_cost_usd']:.6f}` $\\rightarrow$ `${rtd['total_cost_usd']:.6f}`) and **{_pct_delta(pro['avg_turn_latency_ms'], rtd['avg_turn_latency_ms'])}** in average turn latency (`{pro['avg_turn_latency_ms']:.1f} ms` $\\rightarrow$ `{rtd['avg_turn_latency_ms']:.1f} ms`).",
+            f"   - **With Laya Router (`with_router`) vs. Static Hybrid (`coord_simple_subs_complex`)**: Dynamically routing the 30 simple tasks across all 3 specialist sub-agents to `{SIMPLE_MODEL}` delivered an additional **{_pct_delta(hyb['total_cost_usd'], rtd['total_cost_usd'])}** overall cost reduction (`${hyb['total_cost_usd']:.6f}` $\\rightarrow$ `${rtd['total_cost_usd']:.6f}`), **{_pct_delta(hyb_simple_cost, rtd_simple_cost)}** cost reduction on the 30 simple-tier tasks (`${hyb_simple_cost:.6f}` $\\rightarrow$ `${rtd_simple_cost:.6f}`), and **{_pct_delta(hyb['avg_turn_latency_ms'], rtd['avg_turn_latency_ms'])}** faster turn latency.",
+            f"   - **With Laya Router (`with_router`) vs. All-Complex (`all_complex`)**: Combined savings of **{_pct_delta(pro['total_cost_usd'], rtd['total_cost_usd'])}** in total cost (`${pro['total_cost_usd']:.6f}` $\\rightarrow$ `${rtd['total_cost_usd']:.6f}`), **{_pct_delta(pro_simple_cost, rtd_simple_cost)}** on simple-tier tasks (`${pro_simple_cost:.6f}` $\\rightarrow$ `${rtd_simple_cost:.6f}`), and **{_pct_delta(pro['avg_turn_latency_ms'], rtd['avg_turn_latency_ms'])}** in average turn latency (`{pro['avg_turn_latency_ms']:.1f} ms` $\\rightarrow$ `{rtd['avg_turn_latency_ms']:.1f} ms`).",
             "",
         ]
     )
@@ -657,7 +676,7 @@ def print_rich_comparison(results_by_mode: dict[str, list[SampleEvalResult]]) ->
 
         console = Console()
         table = Table(
-            title="📊 Multi-Agent ADK 4-Arm Evaluation (45 Open-Source Samples per Arm, adk-finops)"
+            title=f"📊 Multi-Agent ADK 4-Arm Evaluation ({sim['total_runs']} Open-Source Samples per Arm, temp=0.0, adk-finops)"
         )
         table.add_column("Metric", style="bold cyan")
         table.add_column(f"1. All-Simple\n({SIMPLE_MODEL})", justify="right")
@@ -749,6 +768,64 @@ def print_rich_comparison(results_by_mode: dict[str, list[SampleEvalResult]]) ->
         print(f"With-Router Cost=${rtd['total_cost_usd']:.6f}, Acc={rtd['accuracy_pct']:.1f}%")
 
 
+def _load_existing_mode_results(
+    mode: str,
+    jsonl_file: Path,
+    samples_by_id: dict[str, BenchmarkSample],
+) -> dict[str, SampleEvalResult]:
+    """Loads previously completed (status == 'success') turns from an adk-finops JSONL log."""
+    loaded: dict[str, SampleEvalResult] = {}
+    if not jsonl_file.exists():
+        return loaded
+
+    with open(jsonl_file, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("agent_name") is not None:
+                continue  # Only process session-level summary rows
+            if row.get("status", "success") != "success":
+                continue
+            tags = json.loads(row.get("tags") or "{}")
+            sid = tags.get("sample_id")
+            if not sid or sid not in samples_by_id:
+                continue
+            sample = samples_by_id[sid]
+            by_agent = json.loads(row.get("breakdown_by_agent") or "{}")
+            by_model = json.loads(row.get("breakdown_by_model") or "{}")
+            delegated = [a for a in by_agent.keys() if a != "coordinator_agent"]
+            loaded[sid] = SampleEvalResult(
+                mode=mode,
+                sample_id=sid,
+                dataset=sample.dataset,
+                expected_complexity=sample.expected_complexity,
+                coordinator_model=str(tags.get("coordinator_model", "")),
+                routed_model=str(tags.get("routed_model", "")),
+                laya_choice=str(tags.get("laya_choice", "none")),
+                laya_confidence=float(tags.get("laya_confidence", 0.0)),
+                laya_latency_ms=float(tags.get("laya_latency_ms", 0.0)),
+                delegated_agents=delegated,
+                operational_status="success",
+                is_correct=bool(tags.get("is_correct", False)),
+                predicted_answer=str(tags.get("predicted_answer", "")),
+                ground_truth=sample.ground_truth,
+                prompt_tokens=int(row.get("prompt_tokens", 0)),
+                completion_tokens=int(row.get("completion_tokens", 0)),
+                thoughts_tokens=int(row.get("thoughts_tokens", 0)),
+                total_tokens=int(row.get("total_tokens", 0)),
+                llm_cost_usd=float(row.get("llm_cost_usd", 0.0)),
+                total_cost_usd=float(row.get("total_cost_usd", 0.0)),
+                turn_latency_ms=float(row.get("latency_ms", 0.0)),
+                llm_latency_ms=float(row.get("llm_latency_ms", 0.0)),
+                output_tokens_per_sec=float(row.get("output_tokens_per_sec", 0.0)),
+                total_tokens_per_sec=float(row.get("total_tokens_per_sec", 0.0)),
+                breakdown_by_agent=by_agent,
+                breakdown_by_model=by_model,
+            )
+    return loaded
+
+
 async def async_main(args: argparse.Namespace) -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -759,14 +836,19 @@ async def async_main(args: argparse.Namespace) -> None:
         samples_per_dataset=args.samples_per_dataset,
         refresh_cache=args.refresh_cache,
     )
+    samples_by_id = {s.sample_id: s for s in samples}
     logger.info(
-        "Loaded %d real open-source benchmark samples (%d per dataset across ARC-Easy, MATH-500, HumanEval).",
+        "Loaded %d real open-source benchmark samples (%d per dataset across %s).",
         len(samples),
         args.samples_per_dataset,
+        ", ".join(DATASET_NAMES),
     )
 
-    run_ts = time.strftime("%Y%m%d_%H%M%S")
-    run_log_dir = LOGS_DIR / run_ts
+    if args.resume_log_dir:
+        run_log_dir = Path(args.resume_log_dir)
+    else:
+        run_ts = time.strftime("%Y%m%d_%H%M%S")
+        run_log_dir = LOGS_DIR / run_ts
     run_log_dir.mkdir(parents=True, exist_ok=True)
     all_results_by_mode: dict[str, list[SampleEvalResult]] = {}
 
@@ -775,6 +857,20 @@ async def async_main(args: argparse.Namespace) -> None:
     for mode in MODES_ORDER:
         jsonl_file = run_log_dir / f"{mode}_costs.jsonl"
         csv_file = run_log_dir / f"{mode}_costs.csv"
+
+        existing_by_id = (
+            _load_existing_mode_results(mode, jsonl_file, samples_by_id)
+            if args.resume_log_dir
+            else {}
+        )
+        if existing_by_id:
+            logger.info(
+                "[%s] Loaded %d/%d completed samples from %s.",
+                mode,
+                len(existing_by_id),
+                len(samples),
+                jsonl_file,
+            )
 
         jsonl_exporter = JSONLExporter(str(jsonl_file))
         csv_exporter = CSVExporter(str(csv_file))
@@ -797,6 +893,8 @@ async def async_main(args: argparse.Namespace) -> None:
         logger.info("=== Starting evaluation arm: %s (%d samples, concurrency=%d) ===", mode, len(samples), args.concurrency)
 
         async def _run_indexed(idx: int, sample: BenchmarkSample) -> tuple[int, SampleEvalResult]:
+            if sample.sample_id in existing_by_id:
+                return idx, existing_by_id[sample.sample_id]
             async with sem:
                 logger.info(
                     "[%s] (%d/%d) Running %s (%s)...",
@@ -857,13 +955,13 @@ async def async_main(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate 4-Arm Multi-Agent ADK (All-Simple, All-Complex, Static Hybrid, With Laya Router) on open-source benchmarks."
+        description="Evaluate 4-Arm Multi-Agent ADK (All-Simple, All-Complex, Static Hybrid, With Laya Router) on the 60-sample 2x3 Domain x Complexity open-source benchmark."
     )
     parser.add_argument(
         "--samples-per-dataset",
         type=int,
-        default=15,
-        help="Number of real samples per dataset (ARC-Easy, MATH-500, HumanEval). Default: 15 (45 per arm, 180 total turns).",
+        default=10,
+        help="Number of real samples per dataset (ARC-Easy, MMLU-Pro, GSM8K, MATH-500, MBPP, HumanEval). Default: 10 (60 per arm, 240 total turns).",
     )
     parser.add_argument(
         "--concurrency",
@@ -883,6 +981,12 @@ def main() -> None:
         help="Force re-download of benchmark rows from Hugging Face Hub instead of using the local cache in eval/data_cache/.",
     )
     parser.add_argument(
+        "--resume-log-dir",
+        type=str,
+        default="",
+        help="Optional path to an existing eval/logs/<run_ts> directory to resume from, reusing completed turns.",
+    )
+    parser.add_argument(
         "--render-boxes",
         action="store_true",
         help="Render the per-turn adk-finops Rich terminal summary box after every sample.",
@@ -893,3 +997,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

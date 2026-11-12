@@ -13,9 +13,17 @@ model_router/
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
-├── laya_adk_model_router/
+├── laya_adk_model_router/          # Local System-1 Laya Router (`convaiinnovations/laya`)
 │   ├── __init__.py
 │   ├── .env
+│   ├── agent.py
+│   ├── plugin.py
+│   └── questions.py
+├── decisions_adk_model_router/     # Cloud Google Gemini Decisions API Router (`gemini-decision-1`)
+│   ├── __init__.py
+│   ├── .env
+│   ├── .env.example
+│   ├── README.md
 │   ├── agent.py
 │   ├── plugin.py
 │   └── questions.py
@@ -29,6 +37,8 @@ model_router/
     └── data_cache/
         └── benchmark_samples_v2.json
 ```
+
+> **Also in this repository**: See **[`decisions_adk_model_router/README.md`](decisions_adk_model_router/README.md)** for the sibling ADK router powered by Google's **[Gemini Decisions API](https://ai.google.dev/gemini-api/docs/decisions-api)** (`gemini-decision-1`, 0 output tokens, `$0.10 / 1M` input tokens).
 
 ---
 
